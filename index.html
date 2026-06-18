@@ -3,137 +3,246 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pure P2P WebRTC Tester</title>
+    <title>Serverless WebRTC P2P Chat</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 15px; line-height: 1.5; }
-        textarea { width: 100%; height: 100px; font-family: monospace; box-sizing: border-box; margin-bottom: 10px; }
-        input[type="text"] { width: 75%; padding: 8px; box-sizing: border-box; }
-        button { padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
-        button:disabled { background: #cccccc; cursor: not-allowed; }
-        .section { background: #f8f9fa; border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
-        #chatLog { border: 1px solid #ccc; height: 150px; overflow-y: auto; padding: 10px; margin-top: 10px; background: white; }
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --primary: #4a90e2;
+            --text: #333333;
+            --border: #dddddd;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1, h2 { margin-top: 0; }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+        .step {
+            border: 1px solid var(--border);
+            padding: 15px;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            box-sizing: border-box;
+            margin: 8px 0;
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #status {
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+            background: #ffe3e3;
+            color: #d12323;
+        }
+        #status.connected {
+            background: #e3fcef;
+            color: #0e6245;
+        }
+        #chat-box {
+            border: 1px solid var(--border);
+            height: 250px;
+            overflow-y: auto;
+            padding: 10px;
+            background: #fff;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .msg { margin-bottom: 8px; padding: 6px 10px; border-radius: 4px; max-width: 80%; width: fit-content; }
+        .msg.local { background: #e3f2fd; margin-left: auto; }
+        .msg.remote { background: #f1f1f1; }
+        .chat-input-area { display: flex; gap: 10px; }
+        .chat-input-area input { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <h1>Pure P2P WebRTC Tester</h1>
+<div class="container">
+    <h1>Serverless P2P Chat</h1>
+    <div id="status">Status: Disconnected</div>
 
-    <div class="section">
-        <h3>Step A: Host (User 1)</h3>
-        <p>Click to generate your offer code, then send it to your partner.</p>
-        <button id="createOffer">Create Offer Code</button>
+    <div class="grid">
+        <!-- Host Panel -->
+        <div class="step">
+            <h2>Role A: Host</h2>
+            <p>1. Click Create Offer.</p>
+            <button id="btn-create-offer">1. Create Offer</button>
+            <p>2. Copy this code and send it to Peer B.</p>
+            <textarea id="local-offer" readonly placeholder="Offer code will appear here..."></textarea>
+            <p>4. Paste the Answer code from Peer B here:</p>
+            <textarea id="remote-answer" placeholder="Paste Peer B's Answer here..."></textarea>
+            <button id="btn-accept-answer">5. Connect to Answer</button>
+        </div>
+
+        <!-- Joiner Panel -->
+        <div class="step">
+            <h2>Role B: Joiner</h2>
+            <p>2. Paste the Offer code from Peer A here:</p>
+            <textarea id="remote-offer" placeholder="Paste Peer A's Offer here..."></textarea>
+            <p>3. Click Create Answer.</p>
+            <button id="btn-create-answer">3. Create Answer</button>
+            <p>4. Copy this code and send it back to Peer A.</p>
+            <textarea id="local-answer" readonly placeholder="Answer code will appear here..."></textarea>
+        </div>
     </div>
 
-    <div class="section">
-        <h3>Step B: Join / Accept</h3>
-        <p>Paste the code received from your partner below:</p>
-        <textarea id="incomingCode" placeholder="Paste code here..."></textarea>
-        <button id="acceptCode">Submit Received Code</button>
+    <!-- Chat Interface -->
+    <h2>Chat Room</h2>
+    <div id="chat-box"></div>
+    <div class="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Type a message..." disabled>
+        <button id="btn-send" style="width: auto;" disabled>Send</button>
     </div>
+</div>
 
-    <div class="section">
-        <h3>Step C: Your Output Code</h3>
-        <p>Copy this code and send it to your partner:</p>
-        <textarea id="outputCode" readonly placeholder="Your output code will appear here..."></textarea>
-    </div>
+<script>
+    // Public STUN servers to discover public IP routing options (ICE candidates)
+    const config = {
+        iceServers: [{ urls: "stun:://google.com" }]
+    };
 
-    <div class="section">
-        <h3>Step D: Chat (Unlocks when connected)</h3>
-        <input type="text" id="messageInput" placeholder="Type a message..." disabled>
-        <button id="sendBtn" disabled>Send</button>
-        <div id="chatLog"></div>
-    </div>
+    let pc = new RTCPeerConnection(config);
+    let dataChannel = null;
 
-    <script>
-        // Configuration uses Google's free public STUN server to find your public IP
-        const config = { iceServers: [{ urls: "stun:://google.com" }] };
-        const peerConnection = new RTCPeerConnection(config);
-        let dataChannel;
+    const statusDiv = document.getElementById('status');
+    const chatBox = document.getElementById('chat-box');
+    const chatInput = document.getElementById('chat-input');
+    const btnSend = document.getElementById('btn-send');
 
-        // UI Element Selectors
-        const createOfferBtn = document.getElementById('createOffer');
-        const incomingCodeArea = document.getElementById('incomingCode');
-        const acceptCodeBtn = document.getElementById('acceptCode');
-        const outputCodeArea = document.getElementById('outputCode');
-        const messageInput = document.getElementById('messageInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const chatLog = document.getElementById('chatLog');
+    // Setup UI interactivity
+    document.getElementById('btn-create-offer').addEventListener('click', createOffer);
+    document.getElementById('btn-create-answer').addEventListener('click', createAnswer);
+    document.getElementById('btn-accept-answer').addEventListener('click', acceptAnswer);
+    btnSend.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-        // Fires when WebRTC has found an internet network path
-        peerConnection.onicecandidate = (event) => {
-            if (!event.candidate) {
-                // Convert the local network details to a clean Base64 string for easy copy-pasting
-                outputCodeArea.value = btoa(JSON.stringify(peerConnection.localDescription));
-                outputCodeArea.select();
-                logMessage("<i>System: Connection code fully generated. Copy it now!</i>");
+    // Handle incoming ICE candidates by updating the local session text areas 
+    // once gathering finishes completely (avoids needing a continuous stream of codes)
+    pc.onicecandidate = (e) => {
+        if (e.candidate === null) {
+            if (pc.localDescription.type === 'offer') {
+                document.getElementById('local-offer').value = btoa(JSON.stringify(pc.localDescription));
+            } else if (pc.localDescription.type === 'answer') {
+                document.getElementById('local-answer').value = btoa(JSON.stringify(pc.localDescription));
             }
-        };
-
-        // User 1 action: Generates the initial connection intent (Offer)
-        createOfferBtn.onclick = async () => {
-            logMessage("System: Generating offer...");
-            dataChannel = peerConnection.createDataChannel("chat");
-            setupDataChannel(dataChannel);
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-        };
-
-        // User 1 or User 2 action: Processes a pasted handshake string
-        acceptCodeBtn.onclick = async () => {
-            const rawVal = incomingCodeArea.value.trim();
-            if (!rawVal) return alert("Please paste a code first!");
-            
-            try {
-                // Decode the string back into JSON
-                const signal = JSON.parse(atob(rawVal));
-
-                if (signal.type === "offer") {
-                    // User 2 handles User 1's offer and builds a response (Answer)
-                    logMessage("System: Offer received. Generating answer...");
-                    peerConnection.ondatachannel = (event) => {
-                        dataChannel = event.channel;
-                        setupDataChannel(dataChannel);
-                    };
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                } else if (signal.type === "answer") {
-                    // User 1 receives User 2's answer to finalize the connection
-                    logMessage("System: Answer received. Finalizing connection...");
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
-                }
-            } catch (e) {
-                alert("Invalid code. Make sure you copied the whole string!");
-            }
-        };
-
-        // Binds the open and message events once the direct tunnel is open
-        function setupDataChannel(channel) {
-            channel.onopen = () => {
-                logMessage("<b>Connected directly to peer!</b>");
-                messageInput.disabled = false;
-                sendBtn.disabled = false;
-            };
-            channel.onmessage = (event) => {
-                logMessage(`Peer: ${event.data}`);
-            };
         }
+    };
 
-        // Send a message straight to the other user over WebRTC
-        sendBtn.onclick = () => {
-            const msg = messageInput.value.trim();
-            if (!msg) return;
-            dataChannel.send(msg);
-            logMessage(`You: ${msg}`);
-            messageInput.value = "";
-        };
-
-        // Helper to output status messages into the chat window
-        function logMessage(html) {
-            chatLog.innerHTML += `<p>${html}</p>`;
-            chatLog.scrollTop = chatLog.scrollHeight;
+    // Connection lifecycle status updates
+    pc.onconnectionstatechange = () => {
+        statusDiv.textContent = `Status: ${pc.connectionState}`;
+        if (pc.connectionState === 'connected') {
+            statusDiv.className = 'connected';
+            chatInput.disabled = false;
+            btnSend.disabled = false;
+        } else {
+            statusDiv.className = '';
+            chatInput.disabled = true;
+            btnSend.disabled = true;
         }
-    </script>
+    };
+
+    // --- Role A: Host Functions ---
+    async function createOffer() {
+        dataChannel = pc.createDataChannel("chat");
+        setupDataChannelEvents(dataChannel);
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+    }
+
+    async function acceptAnswer() {
+        const answerRaw = document.getElementById('remote-answer').value.trim();
+        if (!answerRaw) return alert("Please paste the answer token first.");
+        
+        const answerDesc = new RTCSessionDescription(JSON.parse(atob(answerRaw)));
+        await pc.setRemoteDescription(answerDesc);
+    }
+
+    // --- Role B: Joiner Functions ---
+    // Listen for data channel created by the host
+    pc.ondatachannel = (e) => {
+        dataChannel = e.channel;
+        setupDataChannelEvents(dataChannel);
+    };
+
+    async function createAnswer() {
+        const offerRaw = document.getElementById('remote-offer').value.trim();
+        if (!offerRaw) return alert("Please paste the offer token first.");
+
+        const offerDesc = new RTCSessionDescription(JSON.parse(atob(offerRaw)));
+        await pc.setRemoteDescription(offerDesc);
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+    }
+
+    // --- Data Channel & Messaging Handling ---
+    function setupDataChannelEvents(channel) {
+        channel.onopen = () => console.log("Data channel open");
+        channel.onmessage = (e) => appendMessage(e.data, 'remote');
+    }
+
+    function sendMessage() {
+        const msg = chatInput.value.trim();
+        if (!msg || !dataChannel || dataChannel.readyState !== 'open') return;
+        
+        dataChannel.send(msg);
+        appendMessage(msg, 'local');
+        chatInput.value = '';
+    }
+
+    function appendMessage(text, side) {
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('msg', side);
+        msgDiv.textContent = text;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+
 </body>
 </html>
