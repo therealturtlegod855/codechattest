@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pure P2P WebRTC Tester</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 15px; line-height: 1.5; }
+        textarea { width: 100%; height: 100px; font-family: monospace; box-sizing: border-box; margin-bottom: 10px; }
+        input[type="text"] { width: 75%; padding: 8px; box-sizing: border-box; }
+        button { padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        .section { background: #f8f9fa; border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        #chatLog { border: 1px solid #ccc; height: 150px; overflow-y: auto; padding: 10px; margin-top: 10px; background: white; }
+    </style>
+</head>
+<body>
+
+    <h1>Pure P2P WebRTC Tester</h1>
+
+    <div class="section">
+        <h3>Step A: Host (User 1)</h3>
+        <p>Click to generate your offer code, then send it to your partner.</p>
+        <button id="createOffer">Create Offer Code</button>
+    </div>
+
+    <div class="section">
+        <h3>Step B: Join / Accept</h3>
+        <p>Paste the code received from your partner below:</p>
+        <textarea id="incomingCode" placeholder="Paste code here..."></textarea>
+        <button id="acceptCode">Submit Received Code</button>
+    </div>
+
+    <div class="section">
+        <h3>Step C: Your Output Code</h3>
+        <p>Copy this code and send it to your partner:</p>
+        <textarea id="outputCode" readonly placeholder="Your output code will appear here..."></textarea>
+    </div>
+
+    <div class="section">
+        <h3>Step D: Chat (Unlocks when connected)</h3>
+        <input type="text" id="messageInput" placeholder="Type a message..." disabled>
+        <button id="sendBtn" disabled>Send</button>
+        <div id="chatLog"></div>
+    </div>
+
+    <script>
+        // Configuration uses Google's free public STUN server to find your public IP
+        const config = { iceServers: [{ urls: "stun:://google.com" }] };
+        const peerConnection = new RTCPeerConnection(config);
+        let dataChannel;
+
+        // UI Element Selectors
+        const createOfferBtn = document.getElementById('createOffer');
+        const incomingCodeArea = document.getElementById('incomingCode');
+        const acceptCodeBtn = document.getElementById('acceptCode');
+        const outputCodeArea = document.getElementById('outputCode');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const chatLog = document.getElementById('chatLog');
+
+        // Fires when WebRTC has found an internet network path
+        peerConnection.onicecandidate = (event) => {
+            if (!event.candidate) {
+                // Convert the local network details to a clean Base64 string for easy copy-pasting
+                outputCodeArea.value = btoa(JSON.stringify(peerConnection.localDescription));
+                outputCodeArea.select();
+                logMessage("<i>System: Connection code fully generated. Copy it now!</i>");
+            }
+        };
+
+        // User 1 action: Generates the initial connection intent (Offer)
+        createOfferBtn.onclick = async () => {
+            logMessage("System: Generating offer...");
+            dataChannel = peerConnection.createDataChannel("chat");
+            setupDataChannel(dataChannel);
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+        };
+
+        // User 1 or User 2 action: Processes a pasted handshake string
+        acceptCodeBtn.onclick = async () => {
+            const rawVal = incomingCodeArea.value.trim();
+            if (!rawVal) return alert("Please paste a code first!");
+            
+            try {
+                // Decode the string back into JSON
+                const signal = JSON.parse(atob(rawVal));
+
+                if (signal.type === "offer") {
+                    // User 2 handles User 1's offer and builds a response (Answer)
+                    logMessage("System: Offer received. Generating answer...");
+                    peerConnection.ondatachannel = (event) => {
+                        dataChannel = event.channel;
+                        setupDataChannel(dataChannel);
+                    };
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                } else if (signal.type === "answer") {
+                    // User 1 receives User 2's answer to finalize the connection
+                    logMessage("System: Answer received. Finalizing connection...");
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+                }
+            } catch (e) {
+                alert("Invalid code. Make sure you copied the whole string!");
+            }
+        };
+
+        // Binds the open and message events once the direct tunnel is open
+        function setupDataChannel(channel) {
+            channel.onopen = () => {
+                logMessage("<b>Connected directly to peer!</b>");
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+            };
+            channel.onmessage = (event) => {
+                logMessage(`Peer: ${event.data}`);
+            };
+        }
+
+        // Send a message straight to the other user over WebRTC
+        sendBtn.onclick = () => {
+            const msg = messageInput.value.trim();
+            if (!msg) return;
+            dataChannel.send(msg);
+            logMessage(`You: ${msg}`);
+            messageInput.value = "";
+        };
+
+        // Helper to output status messages into the chat window
+        function logMessage(html) {
+            chatLog.innerHTML += `<p>${html}</p>`;
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+    </script>
+</body>
+</html>
